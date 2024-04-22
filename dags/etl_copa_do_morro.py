@@ -1,6 +1,7 @@
 import os
 import sys
 import uuid
+import shutil
 import pandas as pd
 from airflow import DAG
 from sqlalchemy import create_engine
@@ -45,13 +46,6 @@ def extract():
 
         print("Erro ao armazenar dados em bucket temporário! Verifique os Logs para entender o ocorrido...")
         sys.exit(1)
-
-# Argumentos padrão da DAG.
-default_args = {
-    'owner': 'airflow',
-    'start_date': days_ago(1),
-    'retries': 1
-}
 
 # Função para realizar o Transform do ETL.
 def transform():
@@ -103,7 +97,143 @@ def transform():
 
         print("Erro ao armazenar dados transformados em bucket temporário! Verifique os Logs para entender o ocorrido...")
         sys.exit(1)
-        
+
+# Função para realizar o Load do ETL!
+def load():
+
+    db_endpoint = "postgresql+psycopg2://postgres.njtzfnefftlljglzpymt:copadomorro@aws-0-sa-east-1.pooler.supabase.com/postgres"
+
+    try:
+
+        engine = create_engine(f'{db_endpoint}')
+
+    except:
+
+        print("Erro ao acessar o Data Warehouse! Verifique a conexão para continuar...")
+        sys.exit(1)
+    
+    try:
+
+        df_responsavel = pd.read_csv('./bucket/dim_responsavel.csv', sep=',', encoding='utf-8')
+        df_jogo = pd.read_csv('./bucket/dim_jogo.csv', sep=',', encoding='utf-8')
+        df_jogador = pd.read_csv('./bucket/dim_jogador.csv', sep=',', encoding='utf-8')
+        df_jogo_jogador = pd.read_csv('./bucket/fato_jogo_jogador.csv', sep=',', encoding='utf-8')
+    
+    except:
+
+        print("Erro ao carregar dados locais, transformados, do Data Warehouse! Verifique os Logs para entender o ocorrido...")
+        sys.exit(1)
+    
+    try:
+
+        for index, row in df_responsavel.iterrows():
+
+            query = f'''
+                        INSERT INTO dw.responsavel (id, nome, cpf, email)
+                        VALUES
+                            ('{row['id_responsavel']}', '{row['nome_responsavel']}', '{row['cpf_responsavel']}', '{row['email_responsavel']}');
+                    '''
+
+            engine.execute(query)
+
+    except:
+
+        print("Erro ao carregar informações da tabela DIMENSÃO RESPONSÁVEL, para o Data Warehouse. Verifique os Logs para entender o ocorrido...")
+        sys.exit(1)
+    
+    try:
+
+        for index, row in df_jogo.iterrows():
+
+            query = f'''
+                        INSERT INTO dw.jogo (id, data, estado, cidade, comunidade, nome)
+                        VALUES 
+                            ('{row['id_jogo']}', '{row['data_jogo']}', '{row['estado_jogo']}', '{row['cidade_jogo']}', '{row['comunidade_jogo']}', '{row['nome_jogo']}');            
+                    '''
+    
+            engine.execute(query)
+
+    except:
+
+        print("Erro ao carregar informações da tabela DIMENSÃO JOGO, para o Data Warehouse. Verifique os Logs para entender o ocorrido...")
+        sys.exit(1)
+
+    try:
+
+        for index, row in df_jogador.iterrows():
+
+            query = f'''
+                        INSERT INTO dw.jogador (id, nome, cpf, data_nascimento, estado, cidade, comunidade, id_responsavel)
+                        VALUES 
+                            ('{row['id_jogador']}', '{row['nome_jogador']}', '{row['cpf_jogador']}', '{row['data_nascimento_jogador']}', '{row['estado_jogador']}', '{row['cidade_jogador']}', '{row['comunidade_jogador']}', '{row['cpf_responsavel']}');            
+                    '''
+
+            engine.execute(query)
+
+    except:
+
+        print("Erro ao carregar informações da tabela DIMENSÃO JOGADOR, para o Data Warehouse. Verifique os Logs para entender o ocorrido...")
+        sys.exit(1)
+
+    try:
+
+        for index, row in df_jogo_jogador.iterrows():
+
+            query = f'''
+                        INSERT INTO dw.jogo_jogador (id_jogo, id_responsavel, id_jogador) 
+                        VALUES 
+                            ('{row['id_jogo']}', '{row['id_responsavel']}', '{row['id_jogador']}');            
+                    '''
+
+            engine.execute(query)
+
+    except:
+
+        print("Erro ao carregar informações da tabela FATO JOGO_JOGADOR, para o Data Warehouse. Verifique os Logs para entender o ocorrido...")
+        sys.exit(1)
+
+# Função de limpeza após execução do Piepeline de ETL!
+def clean():
+
+    try:
+
+        bucket_folder = os.path.join(os.getcwd(), 'bucket')
+        shutil.rmtree(bucket_folder)
+        print(f"Arquivos auxiliares e pasta temporária 'bucket' excluída com sucesso!")
+
+    except:
+
+        print(f"Erro ao excluir pasta temporária e arquivos auxiliares! Verifique o log para entender oque ocorreu...")
+        sys.exit(1)
+
+    db_endpoint = "postgresql+psycopg2://postgres.njtzfnefftlljglzpymt:copadomorro@aws-0-sa-east-1.pooler.supabase.com/postgres"
+
+    try:
+
+        engine = create_engine(f'{db_endpoint}')
+
+    except:
+
+        print("Erro ao acessar o Banco de Dados para fazer a limpeza do Dump! Verifique a conexão para continuar...")
+        sys.exit(1)
+    
+    try:
+
+        query = 'DELETE FROM be.dw'
+        engine.execute(query)
+
+    except:
+
+        print("Erro ao excluir entradas no banco de Dump, verifique os Logs para continuar!")
+        sys.exit(1)
+
+# Argumentos padrão da DAG.
+default_args = {
+    'owner': 'airflow',
+    'start_date': days_ago(1),
+    'retries': 1
+}
+
 # Definição da DAG.
 with DAG('ETL_CopaDoMorro',
          default_args=default_args,
@@ -126,6 +256,18 @@ with DAG('ETL_CopaDoMorro',
         python_callable=transform
     )
 
+    # Tarefa para carregar os dados.
+    load_task = PythonOperator(
+        task_id='load',
+        python_callable=load
+    )
+
+    # Tarefa de limpeza após execução do ETL.
+    clean_task = PythonOperator(
+        task_id='clean',
+        python_callable=clean
+    )
+
     end = DummyOperator(
         task_id='pipeline_end'
     )
@@ -133,4 +275,6 @@ with DAG('ETL_CopaDoMorro',
     # Definir a ordem de execução das tarefas
     start >> extract_task
     extract_task >> transform_task
-    transform_task >> end
+    transform_task >> load_task
+    load_task >> clean_task
+    clean_task >> end
