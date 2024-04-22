@@ -39,7 +39,7 @@ source venv/bin/activate
 
 7 - Instalar os requisitos:
 ```
-pip install -r requirements.txt"
+pip install -r requirements.txt
 ```
 
 8 - Exportar variável de ambiente da pasta de trabalho do Airflow:
