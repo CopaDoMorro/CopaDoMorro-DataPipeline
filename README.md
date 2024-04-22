@@ -37,9 +37,9 @@ python3.9 -m venv venv
 source venv/bin/activate
 ```
 
-7 - Instalar o Airflow:
+7 - Instalar os requisitos:
 ```
-pip install 'apache-airflow==2.3.2' --constraint "https://raw.githubusercontent.com/apache/airflow/constraints-2.3.2/constraints-3.9.txt"
+pip install -r requirements.txt"
 ```
 
 8 - Exportar variável de ambiente da pasta de trabalho do Airflow:
@@ -54,4 +54,5 @@ airflow standalone
 
 ## Conclusão
 
-Após a configuração, no terminal ficará as credenciais de acesso do Airflow WebServer localizado em **localhost:8080**. A interace Web serve somente para acompanhar a execução, não existe maneira "clicável" de criar ou editar pipelines...
+Após a configuração, no terminal ficará as credenciais de acesso do Airflow WebServer localizado em **localhost:8080**. 
+A interace Web serve somente para acompanhar a execução, não existe maneira "clicável" de criar ou editar pipelines...

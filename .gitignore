@@ -6,6 +6,12 @@ __pycache__/
 # C extensions
 *.so
 
+# Airflow
+*airflow*
+webserver_config.py
+latest
+standalone_admin_password.txt
+
 # Distribution / packaging
 .Python
 build/
